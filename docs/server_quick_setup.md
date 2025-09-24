@@ -11,7 +11,7 @@
    sudo ./high_throughput_server_settings.sh
    ```
 
-2. ** Start a new shell **:
+2. **Start a new shell**:
    ```bash
    bash
    ```
