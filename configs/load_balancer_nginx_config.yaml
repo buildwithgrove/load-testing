@@ -1,0 +1,111 @@
+# ========================================================
+# NGINX LOAD BALANCER CONFIGURATION
+# ========================================================
+# 
+# This YAML file contains all the customizable settings for the nginx
+# load balancer. Use with nginx.conf.template and a generation script
+# to create the final nginx.conf file.
+#
+# ========================================================
+
+# ========================================================
+# NGINX LISTEN CONFIGURATION
+# ========================================================
+nginx:
+  # Address and port where nginx will listen for incoming requests
+  listen_address: "0.0.0.0"          # Listen on all interfaces (or specify IP like "192.168.1.10")
+  listen_port: 3059                   # Port number for nginx to listen on
+
+# ========================================================
+# BACKEND SERVER CONFIGURATION
+# ========================================================
+backend:
+  # Path to append to backend requests (e.g., "/v1", "/api", "" for no path)
+  path: "/v1"                         # Backend API path
+  
+  # List of backend servers
+  servers:
+    - host: "192.168.1.100"           # Backend server 1 IP/hostname
+      port: 8080                      # Backend server 1 port
+      max_fails: 1000                 # Failed attempts before marking unavailable
+      fail_timeout: "30s"             # Wait time before retrying failed server
+      
+    - host: "192.168.1.101"           # Backend server 2 IP/hostname  
+      port: 8080                      # Backend server 2 port
+      max_fails: 1000                 # Failed attempts before marking unavailable
+      fail_timeout: "30s"             # Wait time before retrying failed server
+      
+    - host: "10.0.0.50"               # Backend server 3 IP/hostname
+      port: 3000                      # Backend server 3 port  
+      max_fails: 1000                 # Failed attempts before marking unavailable
+      fail_timeout: "30s"             # Wait time before retrying failed server
+      
+    # Add more backend servers as needed:
+    # - host: "backend4.example.com"
+    #   port: 8080
+    #   max_fails: 1000
+    #   fail_timeout: "30s"
+
+# ========================================================
+# PERFORMANCE AND TIMEOUT SETTINGS
+# ========================================================
+performance:
+  # Request body size limit
+  max_body_size: "10m"                # Maximum size for request bodies
+  
+  # Backend connection timeouts
+  connect_timeout: "1s"               # Time to establish backend connection
+  send_timeout: "2s"                  # Time to send request to backend
+  read_timeout: "2s"                  # Time to read response from backend
+
+# ========================================================
+# EXAMPLE CONFIGURATIONS FOR DIFFERENT ENVIRONMENTS
+# ========================================================
+
+# DEVELOPMENT ENVIRONMENT EXAMPLE:
+# nginx:
+#   listen_address: "127.0.0.1"
+#   listen_port: 8080
+# backend:
+#   path: "/api/dev"
+#   servers:
+#     - host: "localhost"
+#       port: 3000
+#       max_fails: 5
+#       fail_timeout: "10s"
+
+# PRODUCTION ENVIRONMENT EXAMPLE:
+# nginx:
+#   listen_address: "0.0.0.0" 
+#   listen_port: 443
+# backend:
+#   path: "/v2"
+#   servers:
+#     - host: "prod-api-1.company.com"
+#       port: 8080
+#       max_fails: 1000
+#       fail_timeout: "30s"
+#     - host: "prod-api-2.company.com"
+#       port: 8080
+#       max_fails: 1000
+#       fail_timeout: "30s"
+#     - host: "prod-api-3.company.com"
+#       port: 8080  
+#       max_fails: 1000
+#       fail_timeout: "30s"
+
+# MICROSERVICES EXAMPLE:
+# nginx:
+#   listen_address: "0.0.0.0"
+#   listen_port: 80
+# backend:
+#   path: ""  # No path prefix
+#   servers:
+#     - host: "service-1"
+#       port: 8001
+#       max_fails: 100
+#       fail_timeout: "15s"
+#     - host: "service-2" 
+#       port: 8002
+#       max_fails: 100
+#       fail_timeout: "15s"

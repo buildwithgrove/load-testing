@@ -1,0 +1,142 @@
+# ========================================================
+# HIGH PERFORMANCE NGINX LOAD BALANCER CONFIGURATION TEMPLATE
+# ========================================================
+# 
+# QUICK SETUP SUMMARY (< 30 seconds read):
+# • Optimized for maximum throughput with minimal logging
+# • Uses least_conn load balancing with health checks
+# • Health check endpoint: /nginx-health
+# • ⚠️  TEMPLATE FILE: Use with config.yaml and generation script
+# • Default timeouts: 1s connect, 2s send/read
+# • Handles up to 200k file descriptors, 8192 connections per worker
+#
+# ========================================================
+
+# ========================================================
+# GLOBAL WORKER CONFIGURATION
+# ========================================================
+worker_processes auto;              # Auto-detect CPU cores for optimal worker count
+worker_rlimit_nofile 200000;        # Increase file descriptor limit for high concurrency
+worker_cpu_affinity auto;           # Bind workers to specific CPU cores for performance
+error_log /var/log/nginx/error.log crit;  # Only log critical errors to reduce I/O overhead
+pid /run/nginx.pid;                  # Process ID file location
+
+# ========================================================
+# EVENT PROCESSING OPTIMIZATION
+# ========================================================
+events {
+    worker_connections 8192;         # Maximum connections per worker process
+    use epoll;                       # Linux-optimized event handling method
+    multi_accept on;                 # Accept multiple connections at once
+    accept_mutex off;                # Disable mutex for better performance under load
+}
+
+# ========================================================
+# HTTP CONFIGURATION BLOCK
+# ========================================================
+http {
+    # ========================================================
+    # BASIC PERFORMANCE OPTIMIZATIONS
+    # ========================================================
+    sendfile on;                     # Use kernel sendfile() for static files
+    tcp_nopush on;                   # Send headers and file in one packet
+    tcp_nodelay on;                  # Don't buffer small packets
+    keepalive_timeout 30;            # Keep connections alive for 30 seconds
+    keepalive_requests 10000;        # Allow many requests per connection
+    
+    # ========================================================
+    # BUFFER SIZE OPTIMIZATIONS
+    # ========================================================
+    client_body_buffer_size 128k;    # Buffer size for request body
+    client_max_body_size {{max_body_size}};  # Maximum allowed request body size
+    client_header_buffer_size 1k;    # Buffer size for request headers
+    large_client_header_buffers 4 4k; # Large header buffer configuration
+    output_buffers 1 32k;            # Output buffer optimization
+    postpone_output 1460;            # Wait for buffer to fill before sending
+    
+    # ========================================================
+    # LOGGING CONFIGURATION (DISABLED FOR PERFORMANCE)
+    # ========================================================
+    access_log off;                  # Disable access logging to reduce I/O overhead
+    
+    # ========================================================
+    # COMPRESSION (DISABLED FOR MAXIMUM PERFORMANCE)
+    # ========================================================
+    gzip off;                        # Compression disabled to prioritize CPU for proxying
+    
+    # ========================================================
+    # MIME TYPES
+    # ========================================================
+    include /etc/nginx/mime.types;   # Include standard MIME type definitions
+    default_type application/octet-stream;  # Default MIME type for unknown files
+    
+    # ========================================================
+    # LOAD BALANCER UPSTREAM CONFIGURATION
+    # ========================================================
+    upstream backend_servers {
+        least_conn;                  # Use least connections load balancing algorithm
+        
+        # Backend servers will be generated from config.yaml
+        {{#each backend_servers}}
+        server {{host}}:{{port}} max_fails={{max_fails}} fail_timeout={{fail_timeout}};
+        {{/each}}
+        
+        # CONNECTION POOLING OPTIMIZATION
+        keepalive 300;               # Keep 300 idle connections to backends
+        keepalive_requests 10000;    # Reuse connections for up to 10k requests
+        keepalive_timeout 60s;       # Keep connections alive for 60 seconds
+    }
+    
+    # ========================================================
+    # VIRTUAL SERVER CONFIGURATION
+    # ========================================================
+    server {
+        listen {{listen_address}}:{{listen_port}} reuseport;  # Listen configuration from YAML
+        server_tokens off;           # Hide nginx version for security
+        
+        # ========================================================
+        # MAIN PROXY LOCATION
+        # ========================================================
+        location / {
+            # PROXY TARGET
+            proxy_pass http://backend_servers{{backend_path}};  # Backend path from YAML config
+            
+            # HTTP VERSION & CONNECTION HANDLING
+            proxy_http_version 1.1;              # Use HTTP/1.1 for better keepalive support
+            proxy_set_header Connection "";      # Clear connection header for keepalive
+            
+            # REQUEST HEADERS
+            proxy_set_header Host $host;                    # Pass original host header
+            proxy_set_header X-Real-IP $remote_addr;       # Pass client's real IP
+            proxy_set_header X-Forwarded-For $remote_addr; # Pass client IP for logging
+            
+            # RESPONSE BUFFERING
+            proxy_buffering on;          # Enable response buffering for performance
+            proxy_buffer_size 4k;        # Buffer size for response headers
+            proxy_buffers 8 4k;          # Number and size of buffers for response body
+            proxy_busy_buffers_size 8k;  # Size of busy buffers
+            
+            # TIMEOUT CONFIGURATION
+            proxy_connect_timeout {{connect_timeout}};  # Time to establish connection to backend
+            proxy_send_timeout {{send_timeout}};        # Time to send request to backend
+            proxy_read_timeout {{read_timeout}};        # Time to read response from backend
+            
+            # FAILOVER CONFIGURATION
+            proxy_next_upstream error timeout http_500 http_502 http_503;  # Conditions for trying next server
+            proxy_next_upstream_tries 2;        # Maximum number of upstream servers to try
+            proxy_next_upstream_timeout 1s;     # Maximum time for failover attempts
+            
+            # DNS RESOLUTION
+            resolver 8.8.8.8 valid=300s;        # DNS resolver with 5-minute cache
+            resolver_timeout 5s;                 # DNS resolution timeout
+        }
+        
+        # ========================================================
+        # HEALTH CHECK ENDPOINT
+        # ========================================================
+        location = /nginx-health {
+            access_log off;              # Don't log health check requests
+            return 200;                  # Always return HTTP 200 OK for health checks
+        }
+    }
+}
